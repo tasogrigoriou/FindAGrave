@@ -15,7 +15,8 @@ class ViewController: UIViewController {
    override func viewDidLoad() {
       super.viewDidLoad()
       
-      getCemetery("15559")
+//      getCemetery("15559")
+      getAllCemeteries()
    }
 
    override func didReceiveMemoryWarning() {
@@ -24,7 +25,7 @@ class ViewController: UIViewController {
    }
    
    func getCemetery(_ idNumber: String) {
-      Cemetery.cemeteryById(idNumber, completionHandler: { (cemetery, error) in
+      CemeteryList.cemeteryById(idNumber, completionHandler: { (cemetery, error) in
          if let error = error {
             print(error)
             return
@@ -36,9 +37,25 @@ class ViewController: UIViewController {
          // success
          debugPrint(cemetery)
          print(cemetery)
-         
-         self.cemeteries.append(cemetery.cemeterySummary)
       })
+   }
+   
+   func getAllCemeteries() {
+      CemeteryList.parseCemeteriesList { (cemeteryList, error) in
+         if let error = error {
+            // got an error in getting the data
+            print(error)
+            return
+         }
+         guard let cemeteryList = cemeteryList else {
+            print("error getting cemetery list: result is nil")
+            return
+         }
+         // success :)
+//         debugPrint(cemeteryList.cemetery)
+         self.cemeteries = cemeteryList.cemetery
+         print(self.cemeteries[0].cemeteryName)
+      }
    }
    
 }
