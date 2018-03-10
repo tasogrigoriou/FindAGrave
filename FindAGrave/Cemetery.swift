@@ -1,5 +1,5 @@
 //
-//  Welcome.swift
+//  Cemetery.swift
 //  FindAGrave
 //
 //  Created by Anastasios Grigoriou on 3/8/18.
@@ -9,43 +9,51 @@
 import Foundation
 
 struct CemeteryList: Codable {
-   let total, hasMoreRows: String
-   let cemetery: [CemeterySummary]
+   var cemeteries: [CemeteryDetail]?
+   var cemeterySummary: CemeteryDetail?
+   
+   enum CodingKeys: String, CodingKey {
+      case cemeteries = "cemetery"
+      case cemeterySummary
+   }
 }
 
-struct CemeterySummary: Codable {
-   let cemeteryID, cemeteryName, latitude, longitude: String
-   let streetAddress, streetZip, hasPhoto, phone: String
-   let publicNote, approxInterments, approxPhotoRequests, countryName: String
+struct CemeteryDetail: Codable {
+   
+   let cemeteryID, cemeteryName: String
+   let latitude, longitude: String
+   let streetAddress, streetZip, hasPhoto: String
+   let countryName: String
    let countryAbbrev, stateName, stateAbbrev, countyName: String
    let cityName, noMorePhotos: String
-//   let url: String
-//   let alsoKnownAs: [String]
+   var url: String?
    
    enum CodingKeys: String, CodingKey {
       case cemeteryID = "cemeteryId"
-      case cemeteryName, latitude, longitude, streetAddress, streetZip, hasPhoto, phone, publicNote, approxInterments, approxPhotoRequests, countryName, countryAbbrev, stateName, stateAbbrev, countyName, cityName, noMorePhotos
-//      case url = "URL"
-//      case alsoKnownAs
+      case cemeteryName, latitude, longitude, streetAddress, streetZip, hasPhoto, countryName, countryAbbrev, stateName, stateAbbrev, countyName, cityName, noMorePhotos
+      case url = "URL"
    }
 }
 
+enum BackendError: Error {
+   case urlError(reason: String)
+   case objectSerialization(reason: String)
+}
 
 extension CemeteryList {
    
-   static func endpointForCemeteryList() -> String {
-      return "https://www.findagrave.com/cgi-bin/api.cgi?mode=cemetery&cemeteryName=mead&limit=25&skip=0"
-   }
-
-   static func endpointForCemeteryID(_ cemeteryId: String) -> String {
-      return "https://www.findagrave.com/cgi-bin/api.cgi?mode=cemeterySummary&cemeteryId=" + cemeteryId
+   static func endpointForCemeteryName(_ cemeteryName: String) -> String {
+      return "https://www.findagrave.com/cgi-bin/api.cgi?mode=cemetery&cemeteryName=\(cemeteryName)&limit=25&skip=0"
    }
    
-   static func parseCemeteriesList(completionHandler: @escaping (CemeteryList?, Error?) -> Void) {
+   static func endpointForCemeteryID(_ cemeteryID: String) -> String {
+      return "https://www.findagrave.com/cgi-bin/api.cgi?mode=cemeterySummary&cemeteryId=\(cemeteryID)"
+   }
+   
+   static func parseCemeteriesList(_ cemeteryName: String, completionHandler: @escaping (CemeteryList?, Error?) -> Void) {
       // set up URLRequest with URL
-      let endpoint = CemeteryList.endpointForCemeteryList()
+      let endpoint = CemeteryList.endpointForCemeteryName(cemeteryName)
       guard let url = URL(string: endpoint) else {
-         print("Error: cannot create URL")
          let error = BackendError.urlError(reason: "Could not construct URL")
          completionHandler(nil, error)
          return
@@ -54,8 +62,7 @@ extension CemeteryList {
       
       // Make request
       let session = URLSession.shared
-      let task = session.dataTask(with: urlRequest, completionHandler: {
-         (data, response, error) in
+      let task = session.dataTask(with: urlRequest, completionHandler: { (data, response, error) in
          
          // handle response to request
          // check for error
@@ -85,11 +92,10 @@ extension CemeteryList {
       task.resume()
    }
 
-   static func cemeteryById(_ cemeteryId: String, completionHandler: @escaping (CemeterySummary?, Error?) -> Void) {
+   static func cemeteryById(_ cemeteryId: String, completionHandler: @escaping (CemeteryList?, Error?) -> Void) {
       // set up URLRequest with URL
       let endpoint = CemeteryList.endpointForCemeteryID(cemeteryId)
       guard let url = URL(string: endpoint) else {
-         print("Error: cannot create URL")
          let error = BackendError.urlError(reason: "Could not construct URL")
          completionHandler(nil, error)
          return
@@ -98,8 +104,7 @@ extension CemeteryList {
 
       // Make request
       let session = URLSession.shared
-      let task = session.dataTask(with: urlRequest, completionHandler: {
-         (data, response, error) in
+      let task = session.dataTask(with: urlRequest, completionHandler: { (data, response, error) in
 
          // handle response to request
          // check for error
@@ -118,7 +123,7 @@ extension CemeteryList {
 
          let decoder = JSONDecoder()
          do {
-            let cemetery = try decoder.decode(CemeterySummary.self, from: responseData)
+            let cemetery = try decoder.decode(CemeteryList.self, from: responseData)
             completionHandler(cemetery, nil)
          } catch {
             print("error trying to convert data to JSON")
