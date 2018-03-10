@@ -10,16 +10,15 @@ import Foundation
 
 struct CemeteryList: Codable {
    var cemeteries: [CemeteryDetail]?
-   var cemeterySummary: CemeteryDetail?
+   var cemeteryDetail: CemeteryDetail?
    
    enum CodingKeys: String, CodingKey {
       case cemeteries = "cemetery"
-      case cemeterySummary
+      case cemeteryDetail = "cemeterySummary"
    }
 }
 
 struct CemeteryDetail: Codable {
-   
    let cemeteryID, cemeteryName: String
    let latitude, longitude: String
    let streetAddress, streetZip, hasPhoto: String
@@ -35,6 +34,8 @@ struct CemeteryDetail: Codable {
    }
 }
 
+// MARK: - BackendError enum
+
 enum BackendError: Error {
    case urlError(reason: String)
    case objectSerialization(reason: String)
@@ -42,17 +43,31 @@ enum BackendError: Error {
 
 extension CemeteryList {
    
+   // MARK: - Endpoint URLs
+   
    static func endpointForCemeteryName(_ cemeteryName: String) -> String {
       return "https://www.findagrave.com/cgi-bin/api.cgi?mode=cemetery&cemeteryName=\(cemeteryName)&limit=25&skip=0"
+   }
+   
+   static func endpointForCoordinates(_ latitude: String, _ longitude: String) -> String {
+      return "https://www.findagrave.com/cgi-bin/api.cgi?mode=cemetery&cemeteryLatitude=\(latitude)&cemeteryLongitude=\(longitude)&rangeInMiles=50&limit=25&skip=0"
    }
    
    static func endpointForCemeteryID(_ cemeteryID: String) -> String {
       return "https://www.findagrave.com/cgi-bin/api.cgi?mode=cemeterySummary&cemeteryId=\(cemeteryID)"
    }
    
-   static func parseCemeteriesList(_ cemeteryName: String, completionHandler: @escaping (CemeteryList?, Error?) -> Void) {
-      // set up URLRequest with URL
-      let endpoint = CemeteryList.endpointForCemeteryName(cemeteryName)
+   // MARK: - Parse JSON methods
+   
+   static func parseCemeteriesList(_ cemeteryName: String?, _ latitude: String?, _ longitude: String?, completionHandler: @escaping (CemeteryList?, Error?) -> Void) {
+      
+      var endpoint = ""
+      if let cemeteryName = cemeteryName {
+         endpoint = CemeteryList.endpointForCemeteryName(cemeteryName)
+      } else if let latitude = latitude, let longitude = longitude {
+         endpoint = CemeteryList.endpointForCoordinates(latitude, longitude)
+      }
+      
       guard let url = URL(string: endpoint) else {
          let error = BackendError.urlError(reason: "Could not construct URL")
          completionHandler(nil, error)

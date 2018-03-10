@@ -15,30 +15,26 @@ class MapViewController: UIViewController {
    
    @IBOutlet weak var mapView: MKMapView!
    
+   let searchBar = UISearchBar()
+   
    var cemeteries = [CemeteryDetail]()
    
-   let searchBar = UISearchBar()
    let locationManager = CLLocationManager()
    let defaultLocation = CLLocation(latitude: 37.773972, longitude: -122.431297)
    let regionRadius: CLLocationDistance = 10000
+   var cemeteryID: String?
    
-   // MARK: - View lifecycle
+   // MARK: - View Lifecycle
 
    override func viewDidLoad() {
       super.viewDidLoad()
       
-      // create the search bar programatically since you won't be able to drag one onto the navigation bar
       searchBar.delegate = self
       searchBar.sizeToFit()
-      searchBar.placeholder = "Enter Cemetery Name or ID"
-      
+      searchBar.placeholder = "Enter Cemetery ID"
       navigationItem.titleView = searchBar
       
-      centerMapOnLocation(location: locationManager.location ?? defaultLocation)
-      
-//      if let searchText = searchBar.text {
-//         getAllCemeteries(searchText) // TODO: fix for when user hits enter!
-//      }
+      displayCemeteriesInRange()
    }
    
    override func viewDidAppear(_ animated: Bool) {
@@ -46,25 +42,48 @@ class MapViewController: UIViewController {
       checkLocationAuthorizationStatus()
    }
    
-   // MARK: - Cemetery methods
+   // MARK: - Navigation
    
-   func getCemetery(_ idNumber: String) {
-      CemeteryList.cemeteryById(idNumber, completionHandler: { (cemetery, error) in
+   override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+      if let cemeteryID = cemeteryID,
+         let detailViewController = segue.destination as? DetailViewController {
+         detailViewController.cemeteryID = cemeteryID
+      }
+   }
+   
+   // MARK: - Cemetery method
+   
+   func getCemeteryByID(_ idNumber: String) {
+      CemeteryList.cemeteryById(idNumber, completionHandler: { (cemeteryList, error) in
          if let error = error {
             print(error)
             return
          }
-         guard let cemetery = cemetery else {
-            print("error getting cemetery: result is nil")
+         guard let cemeteryList = cemeteryList else {
+            print("error getting cemeteryList: result is nil")
             return
          }
          // success
-         print(cemetery)
+         if let cemetery = cemeteryList.cemeteryDetail {
+            if let latitude = Double(cemetery.latitude), let longitude = Double(cemetery.longitude) {
+               
+               let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+               let subtitle = "\(cemetery.countyName), \(cemetery.stateName)"
+               let mapAnnotation = MapAnnotation(coordinate: coordinate, title: cemetery.cemeteryName, subtitle: subtitle, cemeteryID: cemetery.cemeteryID)
+               
+               DispatchQueue.main.async {
+                  self.mapView.addAnnotation(mapAnnotation)
+                  self.centerMapOnLocation(location: CLLocation(latitude: latitude, longitude: longitude))
+               }
+            }
+         }
+         
       })
    }
    
-   func getAllCemeteries(_ cemeteryName: String) {
-      CemeteryList.parseCemeteriesList(cemeteryName, completionHandler: { (cemeteryList, error) in
+   func getAllCemeteries(_ cemeteryName: String?, _ latitude: String?, _ longitude: String?) {
+      
+      CemeteryList.parseCemeteriesList(cemeteryName, latitude, longitude, completionHandler: { (cemeteryList, error) in
          if let error = error {
             // got an error in getting the data
             print(error)
@@ -76,19 +95,18 @@ class MapViewController: UIViewController {
          }
          // success
          self.cemeteries = cemeteryList.cemeteries!
-         DispatchQueue.main.async {
-//            self.tableView.reloadData
-//            mapView.addAnnotation(self.cemeteries)
-         }
          
-         for cem in self.cemeteries {
+         for cemetery in self.cemeteries {
             
-            if let latitude = Double(cem.latitude), let longitude = Double(cem.longitude) {
+            if let latitude = Double(cemetery.latitude), let longitude = Double(cemetery.longitude) {
                
                let coordinate = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
-               let mapAnnotation = MapAnnotation(coordinate: coordinate, title: cem.cemeteryName, subtitle: cem.cemeteryID)
+               let subtitle = "\(cemetery.countyName), \(cemetery.stateName)"
+               let mapAnnotation = MapAnnotation(coordinate: coordinate, title: cemetery.cemeteryName, subtitle: subtitle, cemeteryID: cemetery.cemeteryID)
                
-               self.mapView.addAnnotation(mapAnnotation)
+               DispatchQueue.main.async {
+                  self.mapView.addAnnotation(mapAnnotation)
+               }
             }
          }
       })
@@ -109,11 +127,57 @@ class MapViewController: UIViewController {
       mapView.setRegion(coordinateRegion, animated: true)
    }
    
+   func displayCemeteriesInRange() {
+      centerMapOnLocation(location: locationManager.location ?? defaultLocation)
+      
+      let latitude = String(describing: locationManager.location?.coordinate.latitude ?? defaultLocation.coordinate.latitude)
+      let longitude = String(describing: locationManager.location?.coordinate.longitude ?? defaultLocation.coordinate.longitude)
+      
+      getAllCemeteries(nil, latitude, longitude)
+   }
+   
 }
 
 // MARK: - MKMapViewDelegate
 
 extension MapViewController: MKMapViewDelegate {
+
+   func mapView(_ mapView: MKMapView, viewFor annotation: MKAnnotation) -> MKAnnotationView? {
+      // Guard against other types of annotations
+      guard let annotation = annotation as? MapAnnotation else { return nil }
+      
+      let identifier = "mapAnnotation"
+      var view: MKMarkerAnnotationView
+      
+      if let dequeuedView = mapView.dequeueReusableAnnotationView(withIdentifier: identifier)
+         as? MKMarkerAnnotationView {
+         dequeuedView.annotation = annotation
+         view = dequeuedView
+      } else {
+         view = MKMarkerAnnotationView(annotation: annotation, reuseIdentifier: identifier)
+         view.canShowCallout = true
+         view.calloutOffset = CGPoint(x: -5, y: 5)
+         view.rightCalloutAccessoryView = UIButton(type: .detailDisclosure)
+      }
+      
+      return view
+   }
+   
+   func mapView(_ mapView: MKMapView, annotationView view: MKAnnotationView,
+                calloutAccessoryControlTapped control: UIControl) {
+      let identifier = "showDetailViewController"
+      
+      let mapAnnotation = view.annotation as? MapAnnotation
+      cemeteryID = mapAnnotation?.cemeteryID
+      
+      performSegue(withIdentifier: identifier, sender: nil)
+   }
+   
+   func mapView(_ mapView: MKMapView, regionDidChangeAnimated animated: Bool) {
+      let latitude = String(describing: mapView.region.center.latitude)
+      let longitude = String(describing: mapView.region.center.longitude)
+      getAllCemeteries(nil, latitude, longitude)
+   }
    
 }
 
@@ -124,24 +188,9 @@ extension MapViewController: UISearchBarDelegate {
    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
       guard let searchText = searchBar.text else { return }
       
-      getAllCemeteries(searchText.components(separatedBy: .whitespaces).joined())
+      getCemeteryByID(searchText)
+      
       searchBar.endEditing(true)
    }
    
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
